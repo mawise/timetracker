@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChronoLocal — Stateless Time Tracker</title>
+  <!-- Optional: Google Identity Services for direct Google Drive appDataFolder sync -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-alt: #334155;
+      --border: #475569;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .brand p { font-size: 0.85rem; color: var(--text-muted); }
+
+    .sync-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .badge {
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--surface-alt);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .badge.synced { color: #86efac; border-color: #166534; background: rgba(22, 101, 52, 0.25); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .col-12 { grid-column: span 12; }
+    .col-8 { grid-column: span 8; }
+    .col-6 { grid-column: span 6; }
+    .col-4 { grid-column: span 4; }
+
+    @media (max-width: 900px) {
+      .col-8, .col-6, .col-4 { grid-column: span 12; }
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
+    input, select, button {
+      font: inherit;
+      font-size: 0.9rem;
+      border-radius: 6px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    input:focus, select:focus {
+      outline: 2px solid var(--primary);
+      border-color: transparent;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      background: var(--surface-alt);
+      transition: all 0.15s ease;
+    }
+    button:hover:not(:disabled) { background: var(--border); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-primary { background: var(--primary); color: #0f172a; border-color: var(--primary); }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); color: white; }
+
+    .btn-success { background: var(--success); color: #052e16; border-color: var(--success); }
+    .btn-danger { background: var(--danger); color: white; border-color: var(--danger); }
+    .btn-sm { padding: 4px 8px; font-size: 0.78rem; }
+
+    /* Live Timer Banner */
+    .timer-box {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 14px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(30, 41, 59, 0.9));
+    }
+    .timer-display {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--primary);
+      min-width: 160px;
+    }
+    .timer-display.running { color: var(--success); }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin-top: 10px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--surface-alt);
+    }
+    th { color: var(--text-muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .report-output {
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+    .bar-track {
+      width: 100%;
+      height: 8px;
+      background: var(--surface-alt);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .bar-fill {
+      height: 100%;
+      background: var(--primary);
+    }
+    details { margin-top: 8px; font-size: 0.85rem; color: var(--text-muted); }
+    summary { cursor: pointer; color: var(--primary); font-weight: 500; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <h1>⏱️ ChronoLocal</h1>
+      <p>Stateless, Time-Zone Aware Time Tracker (IndexedDB + Local File / Google Drive Sync)</p>
+    </div>
+    <div class="sync-bar">
+      <span id="syncStatusBadge" class="badge">Storage: IndexedDB (Local)</span>
+      <button id="btnLinkFile" title="Auto-save to a local file inside your Google Drive / Dropbox / iCloud folder">📁 Link Local Sync File</button>
+      <button id="btnGoogleSync" title="Sync directly to Google Drive appDataFolder">☁️ Sync Google Drive</button>
+      <button id="btnExportJson" class="btn-sm">⬇ Export JSON</button>
+      <label for="importJsonInput" style="margin:0; cursor:pointer; padding:4px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.78rem; background:var(--surface-alt); color:var(--text);">⬆ Import/Merge JSON</label>
+      <input type="file" id="importJsonInput" accept=".json" style="display:none" />
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- 1. LIVE START / STOP WORK TIMER -->
+    <section class="card col-12 timer-box">
+      <div style="flex: 1; min-width: 220px;">
+        <label for="liveCategorySelect">Select Category for Active Work</label>
+        <select id="liveCategorySelect" style="width: 100%;"></select>
+      </div>
+      <div style="min-width: 220px;">
+        <label for="liveTimezoneSelect">Active Time Zone</label>
+        <select id="liveTimezoneSelect" style="width: 100%;"></select>
+      </div>
+      <div>
+        <button id="btnStartWork" class="btn-success" style="padding: 10px 20px;">▶ Start Work</button>
+        <button id="btnStopWork" class="btn-danger" style="padding: 10px 20px;" disabled>⏹ Stop Work</button>
+      </div>
+      <div style="margin-left: auto; text-align: right;">
+        <div id="liveTimerClock" class="timer-display">00:00:00</div>
+        <div id="liveTimerMeta" style="font-size: 0.78rem; color: var(--text-muted);">Timer idle</div>
+      </div>
+    </section>
+
+    <!-- 2. CONFIGURABLE CATEGORIES -->
+    <section class="card col-4">
+      <h2>Categories</h2>
+      <form id="categoryForm" style="display: flex; gap: 8px;">
+        <input type="text" id="newCategoryName" placeholder="e.g., Backend Architecture" required style="flex: 1;" />
+        <button type="submit" class="btn-primary">+ Add</button>
+      </form>
+      <div id="categoryList" class="tag-list"></div>
+
+      <hr style="border: 0; border-top: 1px solid var(--border); margin: 18px 0;" />
+      <details>
+        <summary>⚙️ Google Drive OAuth Setup (Optional)</summary>
+        <div style="margin-top: 8px;">
+          <label for="googleClientIdInput">Google OAuth Public Client ID</label>
+          <input type="text" id="googleClientIdInput" placeholder="12345-abc.apps.googleusercontent.com" style="width: 100%; margin-bottom: 6px;" />
+          <button id="btnSaveClientId" class="btn-sm btn-primary">Save Client ID</button>
+          <p style="font-size: 0.75rem; margin-top: 6px;">
+            Uses non-sensitive scope <code>drive.appdata</code>. No client secret or backend server required.
+          </p>
+        </div>
+      </details>
+    </section>
+
+    <!-- 3. MANUAL TIME ENTRY FORM -->
+    <section class="card col-8">
+      <h2>Manual Time Entry (Time-Zone Aware)</h2>
+      <form id="manualEntryForm">
+        <div class="form-row">
+          <div>
+            <label for="manualCategory">Category</label>
+            <select id="manualCategory" required style="width: 100%;"></select>
+          </div>
+          <div>
+            <label for="manualDate">Start Date</label>
+            <input type="date" id="manualDate" required style="width: 100%;" />
+          </div>
+          <div>
+            <label for="manualStartTime">Start Time</label>
+            <input type="time" id="manualStartTime" step="60" required style="width: 100%;" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <label for="manualHours">Duration (Hours)</label>
+            <input type="number" id="manualHours" min="0" max="999" value="1" required style="width: 100%;" />
+          </div>
+          <div>
+            <label for="manualMinutes">Duration (Minutes)</label>
+            <input type="number" id="manualMinutes" min="0" max="59" value="0" required style="width: 100%;" />
+          </div>
+          <div>
+            <label for="manualTimezone">Entry Time Zone</label>
+            <select id="manualTimezone" style="width: 100%;"></select>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary">Log Time Entry</button>
+      </form>
+    </section>
+
+    <!-- 4. CUSTOM REPORTS: DEFINE & RUN -->
+    <section class="card col-12">
+      <h2>Custom Reports</h2>
+      <div class="grid">
+        <!-- Define a Report Configuration -->
+        <div class="col-4" style="border-right: 1px solid var(--surface-alt); padding-right: 16px;">
+          <h3 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--text-muted);">1. Configure Report Templates</h3>
+          <form id="reportConfigForm">
+            <div style="margin-bottom: 10px;">
+              <label for="reportName">Report Name</label>
+              <input type="text" id="reportName" placeholder="e.g., 2-Week Sprint Lookback" required style="width: 100%;" />
+            </div>
+            <div class="form-row">
+              <div>
+                <label for="reportCount">Duration Count</label>
+                <input type="number" id="reportCount" min="1" max="520" value="2" required style="width: 100%;" />
+              </div>
+              <div>
+                <label for="reportUnit">Duration Unit</label>
+                <select id="reportUnit" style="width: 100%;">
+                  <option value="weeks">Weeks</option>
+                  <option value="months">Months</option>
+                  <option value="quarters">Quarters</option>
+                  <option value="years">Years</option>
+                </select>
+              </div>
+            </div>
+            <button type="submit" class="btn-primary" style="width: 100%;">+ Save Report Template</button>
+          </form>
+          <div id="reportConfigList" class="tag-list" style="margin-top: 14px;"></div>
+        </div>
+
+        <!-- Run a Report -->
+        <div class="col-8">
+          <h3 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--text-muted);">2. Run Report</h3>
+          <form id="runReportForm" class="form-row" style="align-items: end;">
+            <div>
+              <label for="runReportSelect">Configured Report</label>
+              <select id="runReportSelect" required style="width: 100%;"></select>
+            </div>
+            <div>
+              <label for="runReportEndDate">End Day (Inclusive)</label>
+              <input type="date" id="runReportEndDate" required style="width: 100%;" />
+            </div>
+            <div>
+              <label for="runReportTimezone">Report Time Zone</label>
+              <select id="runReportTimezone" style="width: 100%;"></select>
+            </div>
+            <div>
+              <button type="submit" class="btn-primary" style="width: 100%;">Generate Report</button>
+            </div>
+          </form>
+
+          <div id="reportResultContainer" class="report-output" style="display: none;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. RECENT TIME LOGS TABLE -->
+    <section class="card col-12">
+      <h2>
+        <span>Logged Time Entries</span>
+        <span id="entryCountLabel" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;"></span>
+      </h2>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Start (Time-Zone Aware)</th>
+              <th>End (Time-Zone Aware)</th>
+              <th>Time Zone</th>
+              <th>Duration</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="entriesTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+<script>
+/**
+ * ============================================================================
+ * 1. TIME-ZONE AWARE DATE & OFFSET ENGINE
+ * ============================================================================
+ * Handles exact conversions between (YYYY-MM-DD, HH:MM, IANA TimeZone) and
+ * UTC Epoch Milliseconds, including Daylight Saving Time transitions.
+ */
+const TimeZoneEngine = {
+  getUserTimeZone() {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  },
+
+  getSupportedTimeZones() {
+    const localTz = this.getUserTimeZone();
+    if (typeof Intl.supportedValuesOf === 'function') {
+      const zones = Intl.supportedValuesOf('timeZone');
+      return zones.includes(localTz) ? zones : [localTz, ...zones];
+    }
+    return [
+      localTz, 'UTC', 'America/New_York', 'America/Chicago',
+      'America/Denver', 'America/Los_Angeles', 'Europe/London',
+      'Europe/Berlin', 'Asia/Tokyo', 'Australia/Sydney'
+    ];
+  },
+
+  /**
+   * Returns the UTC offset in milliseconds for a specific UTC instant in a given IANA timeZone.
+   */
+  getOffsetMsAtInstant(epochMs, timeZone) {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    const parts = dtf.formatToParts(new Date(epochMs));
+    const map = {};
+    for (const p of parts) map[p.type] = p.value;
+    const hour = map.hour === '24' ? 0 : Number(map.hour);
+    const asUtcMs = Date.UTC(
+      Number(map.year),
+      Number(map.month) - 1,
+      Number(map.day),
+      hour,
+      Number(map.minute),
+      Number(map.second)
+    );
+    // Strip sub-second remainder for clean offset calculation
+    constflooredEpoch = Math.floor(epochMs / 1000) * 1000;
+    return asUtcMs - constflooredEpoch;
+  },
+
+  /**
+   * Converts wall-clock date/time components in a specific IANA timeZone into exact UTC epoch ms.
+   */
+  wallClockToEpochMs(year, month, day, hour = 0, minute = 0, second = 0, timeZone) {
+    const naiveUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+    const offset1 = this.getOffsetMsAtInstant(naiveUtc, timeZone);
+    const guess1 = naiveUtc - offset1;
+    const offset2 = this.getOffsetMsAtInstant(guess1, timeZone);
+    return naiveUtc - offset2;
+  },
+
+  /**
+   * Formats an epoch timestamp as an ISO-8601 string with the explicit offset of `timeZone`.
+   */
+  formatIsoWithTz(epochMs, timeZone) {
+    const offsetMs = this.getOffsetMsAtInstant(epochMs, timeZone);
+    const localDate = new Date(epochMs + offsetMs);
+    const pad = (n) => String(Math.floor(Math.abs(n))).padStart(2, '0');
+
+    const yyyy = localDate.getUTCFullYear();
+    const mm = pad(localDate.getUTCMonth() + 1);
+    const dd = pad(localDate.getUTCDate());
+    const hh = pad(localDate.getUTCHours());
+    const min = pad(localDate.getUTCMinutes());
+    const ss = pad(localDate.getUTCSeconds());
+
+    const totalOffsetMin = Math.round(offsetMs / 60000);
+    const sign = totalOffsetMin >= 0 ? '+' : '-';
+    const offH = pad(Math.floor(Math.abs(totalOffsetMin) / 60));
+    const offM = pad(Math.abs(totalOffsetMin) % 60);
+
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}${sign}${offH}:${offM}`;
+  },
+
+  /**
+   * Formats an epoch timestamp into a human-friendly string in the entry's time zone.
+   */
+  formatReadable(epochMs, timeZone) {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric', month: 'short', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      timeZoneName: 'shortOffset'
+    }).format(new Date(epochMs));
+  },
+
+  /**
+   * Returns current YYYY-MM-DD and HH:MM in the specified timeZone.
+   */
+  getNowWallClock(timeZone) {
+    const iso = this.formatIsoWithTz(Date.now(), timeZone);
+    return {
+      date: iso.slice(0, 10),
+      time: iso.slice(11, 16)
+    };
+  },
+
+  /**
+   * Computes the inclusive start date and inclusive end date (plus exact UTC epoch bounds)
+   * given an inclusive `endDateStr` (YYYY-MM-DD), report `unit`, `count`, and `timeZone`.
+   *
+   * Example: End Day = Saturday 2026-10-17, 2 weeks:
+   * - Exclusive End Day = 2026-10-18 at 00:00:00 (which equals 2026-10-17 23:59:59.999)
+   * - Subtract 14 calendar days -> Inclusive Start Day = Sunday 2026-10-04 at 00:00:00
+   * - Total window = 14 full calendar days including Saturday 2026-10-17.
+   */
+  computeReportBounds(endDateStr, unit, count, timeZone) {
+    const [endY, endM, endD] = endDateStr.split('-').map(Number);
+
+    // Exclusive end calendar day (End Day + 1 day at 00:00:00)
+    const exclusiveEndUtcRef = new Date(Date.UTC(endY, endM - 1, endD + 1));
+    const startUtcRef = new Date(exclusiveEndUtcRef.getTime());
+
+    const n = Number(count);
+    if (unit === 'weeks') {
+      startUtcRef.setUTCDate(startUtcRef.getUTCDate() - (n * 7));
+    } else if (unit === 'months') {
+      startUtcRef.setUTCMonth(startUtcRef.getUTCMonth() - n);
+    } else if (unit === 'quarters') {
+      startUtcRef.setUTCMonth(startUtcRef.getUTCMonth() - (n * 3));
+    } else if (unit === 'years') {
+      startUtcRef.setUTCFullYear(startUtcRef.getUTCFullYear() - n);
+    }
+
+    const startY = startUtcRef.getUTCFullYear();
+    const startM = startUtcRef.getUTCMonth() + 1;
+    const startD = startUtcRef.getUTCDate();
+
+    const exEndY = exclusiveEndUtcRef.getUTCFullYear();
+    const exEndM = exclusiveEndUtcRef.getUTCMonth() + 1;
+    const exEndD = exclusiveEndUtcRef.getUTCDate();
+
+    const startEpochMs = this.wallClockToEpochMs(startY, startM, startD, 0, 0, 0, timeZone);
+    const endEpochExclusiveMs = this.wallClockToEpochMs(exEndY, exEndM, exEndD, 0, 0, 0, timeZone);
+
+    const pad = (v) => String(v).padStart(2, '0');
+    const inclusiveStartDateStr = `${startY}-${pad(startM)}-${pad(startD)}`;
+
+    return {
+      inclusiveStartDateStr,
+      inclusiveEndDateStr: endDateStr,
+      startEpochMs,
+      endEpochExclusiveMs
+    };
+  }
+};
+
+/**
+ * ============================================================================
+ * 2. LOCAL-FIRST STORAGE & CONFLICT-FREE MERGE ENGINE
+ * ============================================================================
+ */
+const DB_NAME = 'ChronoLocalDB';
+const DB_VERSION = 1;
+
+function createDefaultState() {
+  const now = Date.now();
+  return {
+    schemaVersion: 1,
+    categories: [
+      { id: 'cat-eng', name: 'Engineering & Dev', updatedAt: now, deleted: false },
+      { id: 'cat-des', name: 'Design & Prototyping', updatedAt: now, deleted: false },
+      { id: 'cat-ops', name: 'Meetings & Planning', updatedAt: now, deleted: false }
+    ],
+    entries: [],
+    reportConfigs: [
+      { id: 'rep-2w', name: '2-Week Lookback', count: 2, unit: 'weeks', updatedAt: now, deleted: false },
+      { id: 'rep-1m', name: 'Monthly Summary', count: 1, unit: 'months', updatedAt: now, deleted: false },
+      { id: 'rep-1q', name: 'Quarterly Review', count: 1, unit: 'quarters', updatedAt: now, deleted: false }
+    ],
+    activeTimer: null // { categoryId, startEpochMs, timeZone }
+  };
+}
+
+/**
+ * Merges two arrays of entities by `id` using Last-Write-Wins (`updatedAt`).
+ * Preserves `deleted: true` tombstones so deletions propagate across devices.
+ */
+function mergeEntityCollection(localArr = [], remoteArr = []) {
+  const map = new Map();
+  for (const item of localArr) {
+    map.set(item.id, item);
+  }
+  for (const remoteItem of remoteArr) {
+    const existing = map.get(remoteItem.id);
+    if (!existing || (remoteItem.updatedAt || 0) > (existing.updatedAt || 0)) {
+      map.set(remoteItem.id, remoteItem);
+    }
+  }
+  return Array.from(map.values());
+}
+
+function mergeStates(localState, remoteState) {
+  if (!remoteState) return localState;
+  return {
+    schemaVersion: 1,
+    categories: mergeEntityCollection(localState.categories, remoteState.categories),
+    entries: mergeEntityCollection(localState.entries, remoteState.entries),
+    reportConfigs: mergeEntityCollection(localState.reportConfigs, remoteState.reportConfigs),
+    activeTimer: localState.activeTimer || remoteState.activeTimer || null
+  };
+}
+
+const StorageEngine = {
+  db: null,
+  fileHandle: null,
+  googleAccessToken: null,
+
+  async init() {
+    this.db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('kv')) {
+          db.createObjectStore('kv');
+        }
+      };
+      req.onsuccess = (e) => resolve(e.target.result);
+      req.onerror = (e) => reject(e.target.error);
+    });
+
+    let state = await this.getKV('appState');
+    if (!state) {
+      state = createDefaultState();
+      await this.setKV('appState', state);
+    }
+
+    const savedHandle = await this.getKV('fileHandle');
+    if (savedHandle) {
+      this.fileHandle = savedHandle;
+      updateSyncBadge('Local File Linked (Click to Sync)', false);
+    }
+    return state;
+  },
+
+  getKV(key) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('kv', 'readonly');
+      const req = tx.objectStore('kv').get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  setKV(key, val) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('kv', 'readwrite');
+      const req = tx.objectStore('kv').put(val, key);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async saveState(newState) {
+    await this.setKV('appState', newState);
+    if (this.fileHandle) {
+      try {
+        await this.syncWithLocalFile(newState, false);
+      } catch (err) {
+        console.warn('Auto-save to local file skipped until permission re-verified:', err);
+      }
+    }
+  },
+
+  /**
+   * Adapter 1: Local File System Access API (Zero-Login Cloud Folder Sync)
+   */
+  async linkAndSyncLocalFile(currentState) {
+    if (!('showSaveFilePicker' in window)) {
+      alert('Your browser does not support the File System Access API. Use Chrome/Edge/Brave, or use the Export/Import JSON buttons.');
+      return currentState;
+    }
+    try {
+      if (!this.fileHandle) {
+        this.fileHandle = await window.showSaveFilePicker({
+          suggestedName: 'chronolocal-timetracker.json',
+          types: [{ description: 'JSON Database', accept: { 'application/json': ['.json'] } }]
+        });
+        await this.setKV('fileHandle', this.fileHandle);
+      }
+      return await this.syncWithLocalFile(currentState, true);
+    } catch (err) {
+      if (err.name !== 'AbortError') alert('File sync error: ' + err.message);
+      return currentState;
+    }
+  },
+
+  async syncWithLocalFile(currentState, interactivePermission) {
+    const opts = { mode: 'readwrite' };
+    let perm = await this.fileHandle.queryPermission(opts);
+    if (perm !== 'granted') {
+      if (!interactivePermission) return currentState;
+      perm = await this.fileHandle.requestPermission(opts);
+      if (perm !== 'granted') throw new Error('Read/Write permission denied');
+    }
+
+    let merged = currentState;
+    try {
+      const file = await this.fileHandle.getFile();
+      if (file.size > 0) {
+        const text = await file.text();
+        const remote = JSON.parse(text);
+        merged = mergeStates(currentState, remote);
+      }
+    } catch (readErr) {
+      console.warn('Initializing fresh local sync file.');
+    }
+
+    const writable = await this.fileHandle.createWritable();
+    await writable.write(JSON.stringify(merged, null, 2));
+    await writable.close();
+
+    await this.setKV('appState', merged);
+    updateSyncBadge(`Synced: ${this.fileHandle.name}`, true);
+    return merged;
+  },
+
+  /**
+   * Adapter 2: Stateless Google Drive `appDataFolder` Sync via OAuth Token Flow
+   */
+  async syncWithGoogleDrive(currentState) {
+    const clientId = (await this.getKV('googleClientId')) || '';
+    if (!clientId) {
+      alert('Please open "⚙️ Google Drive OAuth Setup" under Categories and paste your Google OAuth Public Client ID first.');
+      return currentState;
+    }
+    if (!window.google || !window.google.accounts) {
+      alert('Google Identity Services script is still loading or blocked.');
+      return currentState;
+    }
+
+    const token = await new Promise((resolve, reject) => {
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/drive.appdata',
+        callback: (resp) => {
+          if (resp.error) reject(new Error(resp.error));
+          else resolve(resp.access_token);
+        }
+      });
+      client.requestAccessToken({ prompt: '' });
+    });
+
+    const headers = { Authorization: `Bearer ${token}` };
+    const searchUrl = 'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name=%27chronolocal-state.json%27&fields=files(id,name)';
+    const searchResp = await fetch(searchUrl, { headers }).then(r => r.json());
+    const existingFile = searchResp.files && searchResp.files[0];
+
+    let merged = currentState;
+    if (existingFile) {
+      const downloadUrl = `https://www.googleapis.com/drive/v3/files/${existingFile.id}?alt=media`;
+      const remoteData = await fetch(downloadUrl, { headers }).then(r => r.json());
+      merged = mergeStates(currentState, remoteData);
+    }
+
+    const metadata = {
+      name: 'chronolocal-state.json',
+      mimeType: 'application/json',
+      ...(existingFile ? {} : { parents: ['appDataFolder'] })
+    };
+
+    const boundary = 'chronolocal_multipart_boundary';
+    const body =
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+      JSON.stringify(metadata) +
+      `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+      JSON.stringify(merged) +
+      `\r\n--${boundary}--`;
+
+    const uploadUrl = existingFile
+      ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart`
+      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+
+    await fetch(uploadUrl, {
+      method: existingFile ? 'PATCH' : 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`
+      },
+      body
+    });
+
+    await this.setKV('appState', merged);
+    updateSyncBadge('Synced: Google Drive (appDataFolder)', true);
+    return merged;
+  }
+};
+
+/**
+ * ============================================================================
+ * 3. APPLICATION CONTROLLER & UI RENDERING
+ * ============================================================================
+ */
+let appState = null;
+let liveTimerInterval = null;
+
+function formatDurationMs(ms) {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+}
+
+function formatHoursMinutes(ms) {
+  const totalMinutes = Math.round(ms / 60000);
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  const decimalHours = (ms / 3600000).toFixed(2);
+  return `${hrs}h ${mins}m (${decimalHours} hrs)`;
+}
+
+function updateSyncBadge(text, isSynced) {
+  const badge = document.getElementById('syncStatusBadge');
+  badge.textContent = text;
+  badge.className = isSynced ? 'badge synced' : 'badge';
+}
+
+function populateTimeZoneSelectors() {
+  const zones = TimeZoneEngine.getSupportedTimeZones();
+  const userTz = TimeZoneEngine.getUserTimeZone();
+  const selects = ['liveTimezoneSelect', 'manualTimezone', 'runReportTimezone'];
+
+  for (const id of selects) {
+    const el = document.getElementById(id);
+    el.innerHTML = '';
+    for (const tz of zones) {
+      const opt = document.createElement('option');
+      opt.value = tz;
+      opt.textContent = tz;
+      if (tz === userTz) opt.selected = true;
+      el.appendChild(opt);
+    }
+  }
+}
+
+function getActiveCategories() {
+  return appState.categories.filter(c => !c.deleted);
+}
+
+function getCategoryName(categoryId) {
+  const found = appState.categories.find(c => c.id === categoryId);
+  return found ? found.name : 'Archived Category';
+}
+
+function renderAll() {
+  renderCategories();
+  renderLiveTimerState();
+  renderReportConfigs();
+  renderEntriesTable();
+}
+
+function renderCategories() {
+  const activeCats = getActiveCategories();
+  const listEl = document.getElementById('categoryList');
+  const liveSelect = document.getElementById('liveCategorySelect');
+  const manualSelect = document.getElementById('manualCategory');
+
+  const prevLiveVal = liveSelect.value;
+  const prevManualVal = manualSelect.value;
+
+  listEl.innerHTML = '';
+  liveSelect.innerHTML = '';
+  manualSelect.innerHTML = '';
+
+  for (const cat of activeCats) {
+    // Tag badge
+    const tag = document.createElement('div');
+    tag.className = 'tag';
+    tag.innerHTML = `<span>${escapeHtml(cat.name)}</span>`;
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-sm';
+    delBtn.textContent = '✕';
+    delBtn.title = 'Remove category';
+    delBtn.onclick = () => deleteCategory(cat.id);
+    tag.appendChild(delBtn);
+    listEl.appendChild(tag);
+
+    // Dropdown options
+    const opt1 = new Option(cat.name, cat.id);
+    const opt2 = new Option(cat.name, cat.id);
+    liveSelect.add(opt1);
+    manualSelect.add(opt2);
+  }
+
+  if (prevLiveVal && activeCats.some(c => c.id === prevLiveVal)) liveSelect.value = prevLiveVal;
+  if (prevManualVal && activeCats.some(c => c.id === prevManualVal)) manualSelect.value = prevManualVal;
+}
+
+function renderLiveTimerState() {
+  const btnStart = document.getElementById('btnStartWork');
+  const btnStop = document.getElementById('btnStopWork');
+  const liveSelect = document.getElementById('liveCategorySelect');
+  const tzSelect = document.getElementById('liveTimezoneSelect');
+  const clockEl = document.getElementById('liveTimerClock');
+  const metaEl = document.getElementById('liveTimerMeta');
+
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+
+  const active = appState.activeTimer;
+  if (active) {
+    btnStart.disabled = true;
+    btnStop.disabled = false;
+    liveSelect.value = active.categoryId;
+    liveSelect.disabled = true;
+    tzSelect.value = active.timeZone;
+    tzSelect.disabled = true;
+    clockEl.classList.add('running');
+
+    const updateTick = () => {
+      const elapsed = Date.now() - active.startEpochMs;
+      clockEl.textContent = formatDurationMs(elapsed);
+    };
+    updateTick();
+    liveTimerInterval = setInterval(updateTick, 1000);
+    metaEl.textContent = `Started ${TimeZoneEngine.formatReadable(active.startEpochMs, active.timeZone)} (${getCategoryName(active.categoryId)})`;
+  } else {
+    btnStart.disabled = getActiveCategories().length === 0;
+    btnStop.disabled = true;
+    liveSelect.disabled = false;
+    tzSelect.disabled = false;
+    clockEl.classList.remove('running');
+    clockEl.textContent = '00:00:00';
+    metaEl.textContent = 'Ready to log work';
+  }
+}
+
+function renderReportConfigs() {
+  const activeReports = appState.reportConfigs.filter(r => !r.deleted);
+  const listEl = document.getElementById('reportConfigList');
+  const selectEl = document.getElementById('runReportSelect');
+  const prevSelected = selectEl.value;
+
+  listEl.innerHTML = '';
+  selectEl.innerHTML = '';
+
+  for (const rep of activeReports) {
+    const label = `${rep.name} (${rep.count} ${rep.unit})`;
+    const tag = document.createElement('div');
+    tag.className = 'tag';
+    tag.innerHTML = `<span>${escapeHtml(label)}</span>`;
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-sm';
+    delBtn.textContent = '✕';
+    delBtn.onclick = () => deleteReportConfig(rep.id);
+    tag.appendChild(delBtn);
+    listEl.appendChild(tag);
+
+    selectEl.add(new Option(label, rep.id));
+  }
+
+  if (prevSelected && activeReports.some(r => r.id === prevSelected)) {
+    selectEl.value = prevSelected;
+  }
+}
+
+function renderEntriesTable() {
+  const activeEntries = appState.entries
+    .filter(e => !e.deleted)
+    .sort((a, b) => b.startEpochMs - a.startEpochMs);
+
+  document.getElementById('entryCountLabel').textContent = `${activeEntries.length} total entries`;
+  const tbody = document.getElementById('entriesTableBody');
+  tbody.innerHTML = '';
+
+  if (activeEntries.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="color: var(--text-muted); text-align:center; padding: 20px;">No time entries logged yet. Use "Start Work" or the Manual Time Entry form above.</td></tr>`;
+    return;
+  }
+
+  for (const entry of activeEntries) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(getCategoryName(entry.categoryId))}</strong></td>
+      <td class="mono">${escapeHtml(entry.startIso)}</td>
+      <td class="mono">${escapeHtml(entry.endIso)}</td>
+      <td><span class="badge">${escapeHtml(entry.timeZone)}</span></td>
+      <td class="mono">${formatDurationMs(entry.durationMs)}</td>
+      <td><button class="btn-sm btn-danger" data-id="${entry.id}">Delete</button></td>
+    `;
+    tr.querySelector('button').onclick = () => deleteEntry(entry.id);
+    tbody.appendChild(tr);
+  }
+}
+
+/**
+ * ============================================================================
+ * 4. USER ACTIONS (CATEGORIES, TIMER, MANUAL ENTRY, REPORTS)
+ * ============================================================================
+ */
+async function addCategory(name) {
+  appState.categories.push({
+    id: crypto.randomUUID(),
+    name: name.trim(),
+    updatedAt: Date.now(),
+    deleted: false
+  });
+  await StorageEngine.saveState(appState);
+  renderAll();
+}
+
+async function deleteCategory(id) {
+  const cat = appState.categories.find(c => c.id === id);
+  if (cat) {
+    cat.deleted = true;
+    cat.updatedAt = Date.now();
+    await StorageEngine.saveState(appState);
+    renderAll();
+  }
+}
+
+async function startWork() {
+  const categoryId = document.getElementById('liveCategorySelect').value;
+  const timeZone = document.getElementById('liveTimezoneSelect').value;
+  if (!categoryId) return alert('Please create and select a category first.');
+
+  appState.activeTimer = {
+    categoryId,
+    startEpochMs: Date.now(),
+    timeZone
+  };
+  await StorageEngine.saveState(appState);
+  renderLiveTimerState();
+}
+
+async function stopWork() {
+  const active = appState.activeTimer;
+  if (!active) return;
+
+  const endEpochMs = Date.now();
+  const startEpochMs = active.startEpochMs;
+  const durationMs = Math.max(1000, endEpochMs - startEpochMs);
+  const tz = active.timeZone || TimeZoneEngine.getUserTimeZone();
+
+  appState.entries.push({
+    id: crypto.randomUUID(),
+    categoryId: active.categoryId,
+    startEpochMs,
+    endEpochMs,
+    durationMs,
+    startIso: TimeZoneEngine.formatIsoWithTz(startEpochMs, tz),
+    endIso: TimeZoneEngine.formatIsoWithTz(endEpochMs, tz),
+    timeZone: tz,
+    updatedAt: Date.now(),
+    deleted: false
+  });
+
+  appState.activeTimer = null;
+  await StorageEngine.saveState(appState);
+  renderAll();
+}
+
+async function logManualEntry(e) {
+  e.preventDefault();
+  const categoryId = document.getElementById('manualCategory').value;
+  const dateStr = document.getElementById('manualDate').value;
+  const timeStr = document.getElementById('manualStartTime').value;
+  const hours = Number(document.getElementById('manualHours').value) || 0;
+  const minutes = Number(document.getElementById('manualMinutes').value) || 0;
+  const timeZone = document.getElementById('manualTimezone').value;
+
+  const durationMs = ((hours * 60) + minutes) * 60000;
+  if (durationMs <= 0) {
+    return alert('Please enter a duration greater than 0 minutes.');
+  }
+
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hour, minute] = timeStr.split(':').map(Number);
+
+  const startEpochMs = TimeZoneEngine.wallClockToEpochMs(year, month, day, hour, minute, 0, timeZone);
+  const endEpochMs = startEpochMs + durationMs;
+
+  appState.entries.push({
+    id: crypto.randomUUID(),
+    categoryId,
+    startEpochMs,
+    endEpochMs,
+    durationMs,
+    startIso: TimeZoneEngine.formatIsoWithTz(startEpochMs, timeZone),
+    endIso: TimeZoneEngine.formatIsoWithTz(endEpochMs, timeZone),
+    timeZone,
+    updatedAt: Date.now(),
+    deleted: false
+  });
+
+  await StorageEngine.saveState(appState);
+  renderAll();
+}
+
+async function deleteEntry(id) {
+  const entry = appState.entries.find(e => e.id === id);
+  if (entry) {
+    entry.deleted = true;
+    entry.updatedAt = Date.now();
+    await StorageEngine.saveState(appState);
+    renderAll();
+  }
+}
+
+async function addReportConfig(e) {
+  e.preventDefault();
+  const name = document.getElementById('reportName').value.trim();
+  const count = Number(document.getElementById('reportCount').value);
+  const unit = document.getElementById('reportUnit').value;
+
+  appState.reportConfigs.push({
+    id: crypto.randomUUID(),
+    name,
+    count,
+    unit,
+    updatedAt: Date.now(),
+    deleted: false
+  });
+
+  document.getElementById('reportName').value = '';
+  await StorageEngine.saveState(appState);
+  renderReportConfigs();
+}
+
+async function deleteReportConfig(id) {
+  const rep = appState.reportConfigs.find(r => r.id === id);
+  if (rep) {
+    rep.deleted = true;
+    rep.updatedAt = Date.now();
+    await StorageEngine.saveState(appState);
+    renderReportConfigs();
+  }
+}
+
+function runCustomReport(e) {
+  if (e) e.preventDefault();
+  const reportId = document.getElementById('runReportSelect').value;
+  const endDateStr = document.getElementById('runReportEndDate').value;
+  const reportTz = document.getElementById('runReportTimezone').value;
+
+  const config = appState.reportConfigs.find(r => r.id === reportId && !r.deleted);
+  if (!config || !endDateStr) return;
+
+  const bounds = TimeZoneEngine.computeReportBounds(
+    endDateStr,
+    config.unit,
+    config.count,
+    reportTz
+  );
+
+  // Aggregate time per category (clamping any entry that crosses the boundary)
+  const totalsByCategory = new Map();
+  for (const cat of getActiveCategories()) {
+    totalsByCategory.set(cat.id, 0);
+  }
+
+  let grandTotalMs = 0;
+  let matchingEntriesCount = 0;
+
+  for (const entry of appState.entries) {
+    if (entry.deleted) continue;
+    const overlapStart = Math.max(entry.startEpochMs, bounds.startEpochMs);
+    const overlapEnd = Math.min(entry.endEpochMs, bounds.endEpochExclusiveMs);
+
+    if (overlapEnd > overlapStart) {
+      const clampedDuration = overlapEnd - overlapStart;
+      const prev = totalsByCategory.get(entry.categoryId) || 0;
+      totalsByCategory.set(entry.categoryId, prev + clampedDuration);
+      grandTotalMs += clampedDuration;
+      matchingEntriesCount++;
+    }
+  }
+
+  const container = document.getElementById('reportResultContainer');
+  container.style.display = 'block';
+
+  const dayCount = Math.round((bounds.endEpochExclusiveMs - bounds.startEpochMs) / 86400000);
+
+  let rowsHtml = '';
+  const sortedRows = Array.from(totalsByCategory.entries())
+    .sort((a, b) => b[1] - a[1]);
+
+  for (const [catId, totalMs] of sortedRows) {
+    const pct = grandTotalMs > 0 ? Math.round((totalMs / grandTotalMs) * 100) : 0;
+    rowsHtml += `
+      <tr>
+        <td>
+          <strong>${escapeHtml(getCategoryName(catId))}</strong>
+          <div class="bar-track"><div class="bar-fill" style="width: ${pct}%;"></div></div>
+        </td>
+        <td class="mono">${formatDurationMs(totalMs)}</td>
+        <td class="mono">${formatHoursMinutes(totalMs)}</td>
+        <td class="mono">${pct}%</td>
+      </tr>
+    `;
+  }
+
+  container.innerHTML = `
+    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:12px;">
+      <div>
+        <div style="font-size:0.78rem; color:var(--text-muted); text-transform:uppercase;">Report Configuration</div>
+        <div style="font-size:1.1rem; font-weight:700;">${escapeHtml(config.name)} (${config.count} ${escapeHtml(config.unit)})</div>
+      </div>
+      <div>
+        <div style="font-size:0.78rem; color:var(--text-muted); text-transform:uppercase;">Inclusive Date Range (${escapeHtml(reportTz)})</div>
+        <div class="mono" style="font-size:1.05rem; color:var(--primary); font-weight:700;">
+          ${bounds.inclusiveStartDateStr} &rarr; ${bounds.inclusiveEndDateStr} (${dayCount} days)
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:0.78rem; color:var(--text-muted); text-transform:uppercase;">Total Logged Time</div>
+        <div class="mono" style="font-size:1.1rem; font-weight:700; color:var(--success);">${formatHoursMinutes(grandTotalMs)}</div>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>HH:MM:SS</th>
+          <th>Total Hours</th>
+          <th>Share</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, s => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[s]));
+}
+
+/**
+ * ============================================================================
+ * 5. INITIALIZATION & EVENT LISTENERS
+ * ============================================================================
+ */
+window.addEventListener('DOMContentLoaded', async () => {
+  populateTimeZoneSelectors();
+  appState = await StorageEngine.init();
+
+  const localTz = TimeZoneEngine.getUserTimeZone();
+  const nowWall = TimeZoneEngine.getNowWallClock(localTz);
+  document.getElementById('manualDate').value = nowWall.date;
+  document.getElementById('manualStartTime').value = nowWall.time;
+  document.getElementById('runReportEndDate').value = nowWall.date;
+
+  const savedClientId = await StorageEngine.getKV('googleClientId');
+  if (savedClientId) {
+    document.getElementById('googleClientIdInput').value = savedClientId;
+  }
+
+  renderAll();
+  runCustomReport();
+
+  // Event Listeners
+  document.getElementById('categoryForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('newCategoryName');
+    if (input.value.trim()) {
+      addCategory(input.value);
+      input.value = '';
+    }
+  });
+
+  document.getElementById('btnStartWork').addEventListener('click', startWork);
+  document.getElementById('btnStopWork').addEventListener('click', stopWork);
+  document.getElementById('manualEntryForm').addEventListener('submit', logManualEntry);
+  document.getElementById('reportConfigForm').addEventListener('submit', addReportConfig);
+  document.getElementById('runReportForm').addEventListener('submit', runCustomReport);
+
+  // Sync Listeners
+  document.getElementById('btnLinkFile').addEventListener('click', async () => {
+    appState = await StorageEngine.linkAndSyncLocalFile(appState);
+    renderAll();
+  });
+
+  document.getElementById('btnGoogleSync').addEventListener('click', async () => {
+    try {
+      appState = await StorageEngine.syncWithGoogleDrive(appState);
+      renderAll();
+    } catch (err) {
+      alert('Google Drive sync failed: ' + err.message);
+    }
+  });
+
+  document.getElementById('btnSaveClientId').addEventListener('click', async () => {
+    const val = document.getElementById('googleClientIdInput').value.trim();
+    await StorageEngine.setKV('googleClientId', val);
+    alert('Google OAuth Client ID saved locally in IndexedDB.');
+  });
+
+  // JSON Export & Import/Merge
+  document.getElementById('btnExportJson').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chronolocal-backup-${nowWall.date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('importJsonInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const imported = JSON.parse(text);
+      appState = mergeStates(appState, imported);
+      await StorageEngine.saveState(appState);
+      renderAll();
+      updateSyncBadge('Merged JSON Backup', true);
+    } catch (err) {
+      alert('Invalid JSON file: ' + err.message);
+    }
+  });
+});
+</script>
+</body>
+</html>
